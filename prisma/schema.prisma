@@ -1,0 +1,351 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+// ============================================
+// AUTHENTICATION & USER MANAGEMENT
+// ============================================
+
+enum Role {
+  ADMIN
+  COACH
+  TRAINEE
+}
+
+model User {
+  id            String    @id @default(cuid())
+  email         String    @unique
+  emailVerified DateTime?
+  password      String?
+  role          Role      @default(TRAINEE)
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  profile            UserProfile?
+  accounts           Account[]
+  sessions           Session[]
+  coachPrograms      TrainingProgram[]   @relation("CoachPrograms")
+  coachClasses       Class[]             @relation("CoachClasses")
+  coachAvailability  CoachAvailability[]
+  enrollments        ProgramEnrollment[]
+  classRegistrations ClassRegistration[]
+  workoutSessions    WorkoutSession[]
+  exerciseLogs       ExerciseLog[]
+
+  @@index([email])
+  @@index([role])
+}
+
+model UserProfile {
+  id        String   @id @default(cuid())
+  userId    String   @unique
+  firstName String
+  lastName  String
+  avatarUrl String?
+  phone     String?
+  bio       String?  @db.Text
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model Account {
+  id                String  @id @default(cuid())
+  userId            String
+  type              String
+  provider          String
+  providerAccountId String
+  refresh_token     String? @db.Text
+  access_token      String? @db.Text
+  expires_at        Int?
+  token_type        String?
+  scope             String?
+  id_token          String? @db.Text
+  session_state     String?
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([provider, providerAccountId])
+  @@index([userId])
+}
+
+model Session {
+  id           String   @id @default(cuid())
+  sessionToken String   @unique
+  userId       String
+  expires      DateTime
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+}
+
+model VerificationToken {
+  identifier String
+  token      String   @unique
+  expires    DateTime
+
+  @@unique([identifier, token])
+}
+
+// ============================================
+// TRAINING PROGRAMS & WORKOUTS
+// ============================================
+
+model TrainingProgram {
+  id            String   @id @default(cuid())
+  coachId       String
+  name          String
+  description   String?  @db.Text
+  durationWeeks Int      @default(4)
+  isActive      Boolean  @default(true)
+  isPublic      Boolean  @default(false)
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  coach       User                @relation("CoachPrograms", fields: [coachId], references: [id], onDelete: Cascade)
+  workouts    Workout[]
+  enrollments ProgramEnrollment[]
+
+  @@index([coachId])
+  @@index([isActive, isPublic])
+}
+
+model Workout {
+  id          String   @id @default(cuid())
+  programId   String
+  name        String
+  description String?  @db.Text
+  dayOfWeek   Int?
+  weekNumber  Int?
+  sortOrder   Int      @default(0)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  program         TrainingProgram   @relation(fields: [programId], references: [id], onDelete: Cascade)
+  exercises       WorkoutExercise[]
+  workoutSessions WorkoutSession[]
+  classes         Class[]
+
+  @@index([programId])
+  @@index([programId, weekNumber, dayOfWeek])
+}
+
+model Exercise {
+  id           String   @id @default(cuid())
+  name         String   @unique
+  description  String?  @db.Text
+  muscleGroup  String
+  equipment    String?
+  instructions String?  @db.Text
+  videoUrl     String?
+  imageUrl     String?
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  workoutExercises WorkoutExercise[]
+  exerciseLogs     ExerciseLog[]
+
+  @@index([muscleGroup])
+  @@index([name])
+}
+
+model WorkoutExercise {
+  id          String   @id @default(cuid())
+  workoutId   String
+  exerciseId  String
+  targetSets  Int      @default(3)
+  targetReps  String
+  restSeconds Int?     @default(90)
+  notes       String?  @db.Text
+  sortOrder   Int      @default(0)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  workout  Workout  @relation(fields: [workoutId], references: [id], onDelete: Cascade)
+  exercise Exercise @relation(fields: [exerciseId], references: [id], onDelete: Cascade)
+
+  @@unique([workoutId, exerciseId])
+  @@index([workoutId])
+  @@index([exerciseId])
+}
+
+// ============================================
+// SCHEDULING & CLASSES
+// ============================================
+
+model CoachAvailability {
+  id        String   @id @default(cuid())
+  coachId   String
+  dayOfWeek Int
+  startTime String
+  endTime   String
+  isActive  Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  coach User @relation(fields: [coachId], references: [id], onDelete: Cascade)
+
+  @@unique([coachId, dayOfWeek, startTime])
+  @@index([coachId])
+}
+
+enum ClassStatus {
+  SCHEDULED
+  IN_PROGRESS
+  COMPLETED
+  CANCELLED
+}
+
+model Class {
+  id           String      @id @default(cuid())
+  coachId      String
+  workoutId    String?
+  title        String
+  description  String?     @db.Text
+  scheduledAt  DateTime
+  durationMins Int         @default(60)
+  maxCapacity  Int         @default(10)
+  location     String?
+  status       ClassStatus @default(SCHEDULED)
+  createdAt    DateTime    @default(now())
+  updatedAt    DateTime    @updatedAt
+
+  coach         User                @relation("CoachClasses", fields: [coachId], references: [id], onDelete: Cascade)
+  workout       Workout?            @relation(fields: [workoutId], references: [id], onDelete: SetNull)
+  registrations ClassRegistration[]
+  sessions      WorkoutSession[]
+
+  @@index([coachId])
+  @@index([scheduledAt])
+  @@index([status])
+}
+
+enum RegistrationStatus {
+  REGISTERED
+  WAITLISTED
+  CANCELLED
+  ATTENDED
+  NO_SHOW
+}
+
+model ClassRegistration {
+  id           String             @id @default(cuid())
+  classId      String
+  traineeId    String
+  status       RegistrationStatus @default(REGISTERED)
+  registeredAt DateTime           @default(now())
+  cancelledAt  DateTime?
+
+  class   Class @relation(fields: [classId], references: [id], onDelete: Cascade)
+  trainee User  @relation(fields: [traineeId], references: [id], onDelete: Cascade)
+
+  @@unique([classId, traineeId])
+  @@index([classId])
+  @@index([traineeId])
+  @@index([status])
+}
+
+// ============================================
+// PROGRAM ENROLLMENT
+// ============================================
+
+model ProgramEnrollment {
+  id        String    @id @default(cuid())
+  programId String
+  traineeId String
+  startDate DateTime  @default(now())
+  endDate   DateTime?
+  isActive  Boolean   @default(true)
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+
+  program TrainingProgram @relation(fields: [programId], references: [id], onDelete: Cascade)
+  trainee User            @relation(fields: [traineeId], references: [id], onDelete: Cascade)
+
+  @@unique([programId, traineeId])
+  @@index([traineeId])
+  @@index([isActive])
+}
+
+// ============================================
+// WORKOUT LOGGING & TRACKING
+// ============================================
+
+model WorkoutSession {
+  id          String    @id @default(cuid())
+  traineeId   String
+  workoutId   String
+  classId     String?
+  startedAt   DateTime  @default(now())
+  completedAt DateTime?
+  notes       String?   @db.Text
+  rating      Int?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  trainee      User          @relation(fields: [traineeId], references: [id], onDelete: Cascade)
+  workout      Workout       @relation(fields: [workoutId], references: [id], onDelete: Cascade)
+  class        Class?        @relation(fields: [classId], references: [id], onDelete: SetNull)
+  exerciseLogs ExerciseLog[]
+
+  @@index([traineeId])
+  @@index([workoutId])
+  @@index([startedAt])
+}
+
+model ExerciseLog {
+  id               String   @id @default(cuid())
+  workoutSessionId String
+  exerciseId       String
+  traineeId        String
+  setNumber        Int
+  weight           Float?
+  weightUnit       String   @default("kg")
+  reps             Int
+  rpe              Int?
+  notes            String?
+  completedAt      DateTime @default(now())
+
+  workoutSession WorkoutSession @relation(fields: [workoutSessionId], references: [id], onDelete: Cascade)
+  exercise       Exercise       @relation(fields: [exerciseId], references: [id], onDelete: Cascade)
+  trainee        User           @relation(fields: [traineeId], references: [id], onDelete: Cascade)
+
+  @@index([workoutSessionId])
+  @@index([exerciseId])
+  @@index([traineeId])
+  @@index([completedAt])
+}
+
+// ============================================
+// GAMIFICATION & LEADERBOARDS
+// ============================================
+
+model Achievement {
+  id          String   @id @default(cuid())
+  name        String   @unique
+  description String
+  iconUrl     String?
+  category    String
+  threshold   Int
+  createdAt   DateTime @default(now())
+
+  userAchievements UserAchievement[]
+}
+
+model UserAchievement {
+  id            String   @id @default(cuid())
+  userId        String
+  achievementId String
+  earnedAt      DateTime @default(now())
+
+  achievement Achievement @relation(fields: [achievementId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, achievementId])
+  @@index([userId])
+}
