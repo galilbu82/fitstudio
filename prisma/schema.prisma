@@ -149,6 +149,7 @@ model Exercise {
   updatedAt    DateTime @updatedAt
 
   workoutExercises WorkoutExercise[]
+  personalRecords  PersonalRecord[]
   exerciseLogs     ExerciseLog[]
 
   @@index([muscleGroup])
@@ -348,5 +349,45 @@ model UserAchievement {
   achievement Achievement @relation(fields: [achievementId], references: [id], onDelete: Cascade)
 
   @@unique([userId, achievementId])
+  @@index([userId])
+}
+
+enum LeaderboardMetric {
+  TOTAL_VOLUME
+  WORKOUT_COUNT
+  CURRENT_STREAK
+  ATTENDANCE_RATE
+}
+
+enum LeaderboardPeriod {
+  WEEKLY
+  MONTHLY
+  ALL_TIME
+}
+
+model LeaderboardEntry {
+  id           String            @id @default(cuid())
+  userId       String
+  metric       LeaderboardMetric
+  period       LeaderboardPeriod
+  value        Float
+  rank         Int?
+  calculatedAt DateTime          @default(now())
+
+  @@unique([userId, metric, period])
+  @@index([metric, period, value])
+}
+
+model PersonalRecord {
+  id         String   @id @default(cuid())
+  userId     String
+  exerciseId String
+  weight     Float
+  reps       Int
+  achievedAt DateTime @default(now())
+
+  exercise Exercise @relation(fields: [exerciseId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, exerciseId])
   @@index([userId])
 }
