@@ -319,6 +319,7 @@ model ExerciseLog {
   @@index([workoutSessionId])
   @@index([exerciseId])
   @@index([traineeId])
+  @@unique([workoutSessionId, exerciseId, setNumber])
   @@index([completedAt])
 }
 
